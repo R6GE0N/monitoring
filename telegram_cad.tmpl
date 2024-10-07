@@ -1,0 +1,11 @@
+{{ define "telegram.cadvisor" }}
+  {{ range .Alerts }}
+  ⚠️ {{ .Status | toUpper }}⚠️
+  Алерт (cAdvisor):{{ .Labels.alertname }}
+  Контейнер: {{ .Labels.container }}
+  Инстанс: {{ .Labels.instance }}
+  {{ if .Annotations.summary }}Сводка: {{ .Annotations.summary }}{{ end }}
+  {{ if .Annotations.description }}Описание: {{ .Annotations.description }}{{ end }}
+  {{ end }}
+{{ end }}
+

@@ -1,0 +1,119 @@
+---
+- hosts: localhost
+  become: yes
+  tasks:
+
+    # Установка зависимостей
+
+    # Создание директории /etc/apt/keyrings/
+    - name: Create directory for keyrings
+      file:
+        path: /etc/apt/keyrings/
+        state: directory
+        mode: '0755'
+
+    # Скачивание GPG ключа Grafana и сохранение его в /etc/apt/keyrings/grafana.gpg
+    - name: Download and add Grafana GPG key
+      shell: |
+        wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | tee /etc/apt/keyrings/grafana.gpg > /dev/null
+      args:
+        creates: /etc/apt/keyrings/grafana.gpg  # Чтобы не перезаписывать файл, если он уже существует
+
+    - name: Add Grafana repository to sources.list.d
+      lineinfile:
+        path: /etc/apt/sources.list.d/grafana.list
+        line: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main"
+        create: yes
+
+#    - name: Update apt package list
+ #     apt:
+  #      update_cache: yes
+
+    # Установка Grafana
+    - name: Install latest version of Grafana
+      apt:
+        name: grafana
+        state: latest
+
+    # Запуск и включение Grafana
+    - name: Enable and start Grafana service
+      systemd:
+        name: grafana-server
+        enabled: yes
+        state: started
+
+    # Настройка Grafana как службы, чтобы она стартовала автоматически при загрузке системы
+    - name: Ensure Grafana starts at boot
+      systemd:
+        name: grafana-server
+        enabled: yes
+
+    # Настройка Prometheus как источника данных в Grafana
+    - name: Configure Prometheus data source in Grafana
+      uri:
+        url: "http://localhost:3000/api/datasources"
+        method: POST
+        body_format: json
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Bearer admin:admin"
+        body: >
+          {
+            "name": "Prometheus",
+            "type": "prometheus",
+            "url": "http://localhost:9090",
+            "access": "proxy",
+            "basicAuth": false
+          }
+        status_code: 200
+      ignore_errors: true
+
+    # Импорт дашбордов для всех метрик
+    - name: Import Grafana dashboards for Node Exporter
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/1860/revisions/23/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for cAdvisor
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/14282/revisions/3/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for Alertmanager
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/9578/revisions/1/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for UPS Exporter
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/10340/revisions/1/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for Blackbox Exporter
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/10991/revisions/1/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for Smartctl Exporter
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/13230/revisions/2/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true
+
+    - name: Import Grafana dashboards for Ping Exporter
+      grafana_dashboard:
+        url: "https://grafana.com/api/dashboards/10341/revisions/1/download"
+        grafana_url: "http://localhost:3000"
+        grafana_api_key: "Bearer admin:admin"
+        overwrite: true

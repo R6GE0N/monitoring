@@ -1,0 +1,78 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+alerting:
+  alertmanagers:
+  - scheme: http
+    static_configs:
+    - targets:
+       - 'localhost:9093'
+
+rule_files:
+  - alert.rules.yml
+scrape_configs:
+  # Мониторинг самого Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+  # Мониторинг Alertmanager
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['localhost:9093'] 
+
+  # Мониторинг NodeExporter (метрики ОС)
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Мониторинг cAdvisor (контейнеры)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['localhost:8081']
+
+  # Мониторинг PingExporter (доступность серверов)
+  - job_name: 'ping_exporter'
+    static_configs:
+      - targets: ['localhost:9427']
+
+  # Мониторинг UPS Exporter (мониторинг источников бесперебойного питания)
+  - job_name: 'ups_exporter'
+    static_configs:
+      - targets: ['localhost:9199']
+
+  # Мониторинг SmartExporter (мониторинг дисков)
+  - job_name: 'smartexporter'
+    static_configs:
+      - targets: ['localhost:9633']
+
+  - job_name: 'blackbox_exporter'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]  # Проверка успешного ответа HTTP
+    static_configs:
+      - targets:
+          # Проверка доступности главной страницы
+          - https://vega.mirea.ru/new/main/
+          # Аутентификация студентов (запрос страницы логина)
+          #- https://vega.mirea.ru/new/login
+          # Отправка файлов на странице дисциплин
+          - https://vega.mirea.ru/new/disc/
+          # Акселераторы 
+          #- https://vega.mirea.ru/new/accelerators
+          # Интеллектуальный поиск
+          #- https://vega.mirea.ru/new/search
+          # Просмотр документов в интеллектуальном поиске
+          #- https://vega.mirea.ru/new/documents/view
+          # Списки подгрупп по курсам
+          - https://vega.mirea.ru/new/rasp/groups.php
+          # Запись на предзащиту
+          - https://vega.mirea.ru/new/reception/
+          # Регистрация НТК
+          #- https://vega.mirea.ru/new/ntk/register
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - target_label: instance
+        replacement: blackbox
+      - target_label: __address__
+        replacement: localhost:9115  # Адрес BlackBox Exporter

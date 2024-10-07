@@ -1,0 +1,389 @@
+---
+- hosts: localhost
+  become: yes  # Запуск с правами суперпользователя
+
+  vars:
+    # Определим рабочую папку для всех установок
+    install_dir: /home/greyeye/monitoring
+
+  tasks:
+
+    # Создадим директорию для всех сервисов
+    - name: Create installation directory
+      file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: '0755'
+
+    # Установка Prometheus
+#    - name: Download Prometheus
+ #     get_url:
+  #      url: https://github.com/prometheus/prometheus/releases/download/v2.46.0/prometheus-2.46.0.linux-amd64.tar.gz
+   #     dest: "{{ install_dir }}/prometheus.tar.gz"
+
+   # - name: Extract Prometheus
+    #  unarchive:
+     #   src: "{{ install_dir }}/prometheus.tar.gz"
+      #  dest: "{{ install_dir }}/"
+       # remote_src: yes
+
+    # Настройка конфигурации Prometheus со всеми метриками
+    - name: Create Prometheus config file
+      copy:
+        dest: "{{ install_dir }}/prometheus-2.46.0.linux-amd64/prometheus.yml"
+        content: |
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+          alerting:
+            alertmanagers:
+            - scheme: http
+              static_configs:
+              - targets:
+                 - 'localhost:9093'
+
+          rule_files:
+            - alert.rules.yml
+          scrape_configs:
+            # Мониторинг самого Prometheus
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
+            # Мониторинг Alertmanager
+            - job_name: 'alertmanager'
+              static_configs:
+                - targets: ['localhost:9093'] 
+
+            # Мониторинг NodeExporter (метрики ОС)
+            - job_name: 'node_exporter'
+              static_configs:
+                - targets: ['localhost:9100']
+
+            # Мониторинг cAdvisor (контейнеры)
+            - job_name: 'cadvisor'
+              static_configs:
+                - targets: ['localhost:8081']
+
+            # Мониторинг PingExporter (доступность серверов)
+            - job_name: 'ping_exporter'
+              static_configs:
+                - targets: ['localhost:9427']
+
+            # Мониторинг UPS Exporter (мониторинг источников бесперебойного питания)
+            - job_name: 'ups_exporter'
+              static_configs:
+                - targets: ['localhost:9199']
+
+            # Мониторинг SmartExporter (мониторинг дисков)
+            - job_name: 'smartexporter'
+              static_configs:
+                - targets: ['localhost:9633']
+
+            - job_name: 'blackbox_exporter'
+              metrics_path: /probe
+              params:
+                module: [http_2xx]  # Проверка успешного ответа HTTP
+              static_configs:
+                - targets:
+                    # Проверка доступности главной страницы
+                    - https://vega.mirea.ru/new/main/
+                    # Аутентификация студентов (запрос страницы логина)
+                    #- https://vega.mirea.ru/new/login
+                    # Отправка файлов на странице дисциплин
+                    - https://vega.mirea.ru/new/disc/
+                    # Акселераторы 
+                    #- https://vega.mirea.ru/new/accelerators
+                    # Интеллектуальный поиск
+                    #- https://vega.mirea.ru/new/search
+                    # Просмотр документов в интеллектуальном поиске
+                    #- https://vega.mirea.ru/new/documents/view
+                    # Списки подгрупп по курсам
+                    - https://vega.mirea.ru/new/rasp/groups.php
+                    # Запись на предзащиту
+                    - https://vega.mirea.ru/new/reception/
+                    # Регистрация НТК
+                    #- https://vega.mirea.ru/new/ntk/register
+              relabel_configs:
+                - source_labels: [__address__]
+                  target_label: __param_target
+                - target_label: instance
+                  replacement: blackbox
+                - target_label: __address__
+                  replacement: localhost:9115  # Адрес BlackBox Exporter
+
+
+    # Запуск Prometheus
+    #- name: Start Prometheus
+     # shell: "{{ install_dir }}/prometheus-2.46.0.linux-amd64/prometheus --config.file=/home/greyeye/monitoring/prometheus-2.46.0.linux-amd64/prometheus.yml &"
+     # become: yes
+    # Установка Alertmanager
+   # - name: Download Alertmanager
+    #  get_url:
+     #   url: https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz
+      #  dest: "{{ install_dir }}/alertmanager.tar.gz"
+
+   # - name: Extract Alertmanager
+    #  unarchive:
+     #   src: "{{ install_dir }}/alertmanager.tar.gz"
+      #  dest: "{{ install_dir }}/"
+       # remote_src: yes
+
+    # Настройка конфигурации Alertmanager
+    - name: Create Alertmanager config file
+      copy:
+        dest: "{{ install_dir }}/alertmanager-0.25.0.linux-amd64/alertmanager.yml"
+        content: |
+          global:
+          resolve_timeout: 5m
+          telegram_api_url: "https://api.telegram.org"
+
+          templates:
+            - '/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/*.tmpl'
+
+          receivers:
+            - name: blackhole
+            - name: telegram-test
+              telegram_configs:
+                - chat_id: -1002445026260
+                  bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+                  api_url: "https://api.telegram.org"
+                  send_resolved: true
+                  message_thread_id: 7
+                  parse_mode: HTML
+                  message: {{'{{'}} template "telegram.default" . {{'}}'}}
+
+
+              route:
+              group_by: ['ds_id'] # Алерты группируются по UUID кластера.
+              group_wait: 15s
+              group_interval: 30s
+              repeat_interval: 12h
+              receiver: telegram-test    
+              routes:
+                - receiver: telegram-test
+                  continue: true
+                  matchers:
+                    - severity="critical"
+                - receiver: blackhole
+                  matchers:
+                    - alertname="Watchdog"
+
+
+    - name: Create Alert Rules configuration file
+      copy:
+        dest: "{{ install_dir }}/prometheus-2.46.0.linux-amd64/alert.rules.yml"
+        content: |
+          groups:
+            - name: InstantAlertTest
+              rules:
+              - alert: TestAlert
+                expr: vector(1)
+                for: 0m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Тестовый алерт"
+                  description: "Это тестовый алерт для проверки отправки уведомления в Telegram."
+
+
+    # Запуск Alertmanager
+#    - name: Start Alertmanager
+ #     shell: "{{ install_dir }}/alertmanager-0.25.0.linux-amd64/alertmanager --config.file=/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/alertmanager.yml &"
+  #    become: yes
+
+    # Установка NodeExporter
+    - name: Download NodeExporter
+      get_url:
+        url: https://github.com/prometheus/node_exporter/releases/download/v1.5.0/node_exporter-1.5.0.linux-amd64.tar.gz
+        dest: "{{ install_dir }}/node_exporter.tar.gz"
+
+    - name: Extract NodeExporter
+      unarchive:
+        src: "{{ install_dir }}/node_exporter.tar.gz"
+        dest: "{{ install_dir }}/"
+        remote_src: yes
+
+    # Запуск NodeExporter
+    - name: Start NodeExporter
+      shell: "{{ install_dir }}/node_exporter-1.5.0.linux-amd64/node_exporter &"
+
+    # Установка cAdvisor через Docker
+    - name: Run cAdvisor in Docker with specific version and parameters
+      docker_container:
+        name: cadvisor
+        image: gcr.io/cadvisor/cadvisor:v0.49.1  # Используем версию v0.49.1
+        ports:
+          - "8081:8080"
+        volumes:
+          - "/:/rootfs:ro"
+          - "/var/run:/var/run:ro"
+          - "/sys:/sys:ro"
+          - "/var/lib/docker/:/var/lib/docker:ro"
+          - "/dev/disk/:/dev/disk:ro"
+        privileged: yes
+        devices:
+          - "/dev/kmsg:/dev/kmsg"
+        detach: true
+        restart_policy: always  # Автоматический перезапуск контейнера при сбоях
+      become: yes
+
+    # Установка PingExporter
+    - name: Download PingExporter
+      get_url:
+        url: https://github.com/czerwonk/ping_exporter/releases/download/1.1.3/ping_exporter_1.1.3_linux_amd64.tar.gz
+        dest: "{{ install_dir }}/ping_exporter.tar.gz"
+
+    - name: Extract PingExporter
+      unarchive:
+        src: "{{ install_dir }}/ping_exporter.tar.gz"
+        dest: "{{ install_dir }}/"
+        remote_src: yes
+
+    - name: Create Ping_exporter config file
+      copy:
+        dest: "{{ install_dir }}/ping_exp.yml"
+        content: |
+          targets:
+            - 8.8.8.8
+            - 8.8.4.4
+            - 2001:4860:4860::8888
+            - 2001:4860:4860::8844
+            - google.com:
+                asn: 15169
+
+          dns:
+            refresh: 2m15s
+            nameserver: 1.1.1.1
+
+          ping:
+            interval: 2s
+            history-size: 42
+            payload-size: 120
+
+          options:
+            disableIPv6: false
+
+    - name: Start PingExporter
+      shell: "{{ install_dir }}/ping_exporter --config.path={{ install_dir }}/ping_exp.yml &"
+      become: yes
+
+    - name: Download NUT Exporter v3.1.1
+      get_url:
+        url: https://github.com/DRuggeri/nut_exporter/releases/download/v3.1.1/nut_exporter-v3.1.1-linux-amd64
+        dest: "{{ install_dir }}/nut_exporter"
+        mode: '0755'
+      become: yes
+
+    - name: Create NUT Exporter configuration file
+      copy:
+        dest: "{{ install_dir  }}/nut_exporter_config.yml"
+        content: |
+          nut.server: "localhost"
+          nut.port: "9199"  # стандартный порт NUT
+          nut.username: "your_nut_username"
+          nut.password: "your_nut_password"
+
+    - name: Run NUT Exporter
+      shell: "{{ install_dir  }}/nut_exporter --nut.server=localhost &"
+      become: yes
+
+    # Установка smarttools для дисков
+    - name: Install smartmontools
+      apt:
+        name: smartmontools
+        state: present
+      become: yes
+
+    # Создание директории для S.M.A.R.T. Exporter
+    - name: Create directory for S.M.A.R.T. Exporter
+      file:
+        path: "{{ install_dir }}/smart_exporter"
+        state: directory
+        mode: '0755'
+
+    # Скачивание Smartctl Exporter
+    - name: Download Smartctl Exporter
+      get_url:
+        url: https://github.com/prometheus-community/smartctl_exporter/releases/download/v0.12.0/smartctl_exporter-0.12.0.linux-amd64.tar.gz
+        dest: "{{ install_dir }}/smart_exporter/smartctl_exporter-0.12.0.linux-amd64.tar.gz"
+        mode: '0755'
+
+    # Extract 
+    - name: Extract Smartctl Exporter
+      unarchive:
+        src: "{{ install_dir }}/smart_exporter/smartctl_exporter-0.12.0.linux-amd64.tar.gz"
+        dest: "{{ install_dir }}/smart_exporter"
+        remote_src: yes
+
+    - name: Create Smartctl configuration file
+      copy:
+        dest: "{{ install_dir  }}/smart_exporter/smartctl_exporter-0.12.0.linux-amd64/smartctl_config.yml"
+        content: |
+          disks:
+            - name: sda
+              path: /var/snap/firefox/common/host-hunspell/
+              smartctl_args: "-a"
+
+          metrics:
+            include_temperature: true # Температура
+            include_errors: true # Ошибки
+            include_smart_health_status: true  # Включаем метрику состояния здоровья
+            include_reallocated_sector_count: true  # Перезаписанные сектора
+            include_read_error_rate: true  # Ошибки чтения
+            include_write_error_rate: true  # Ошибки записи
+            include_seek_error_rate: true  # Ошибки поиска
+            include_power_on_hours: true  # Время работы диска
+            include_power_cycle_count: true  # Количество циклов включения/выключения
+            include_current_pending_sector: true  # Количество секторов в ожидании перезаписи
+            include_ecc_recovered: true  # Исправленные аппаратные ошибки
+
+            logging:
+              level: info
+
+    # Запуск Smartctl Exporter
+    - name: Run Smartctl Exporter
+      shell: "{{ install_dir }}/smart_exporter/smartctl_exporter-0.12.0.linux-amd64/smartctl_exporter --smartctl.path={{ install_dir }}/smart_exporter/smartctl_exporter-0.12.0.linux-amd64/smartctl_config.yml &"
+      become: yes
+
+    - name: Download BlackBox Exporter
+      get_url:
+        url: https://github.com/prometheus/blackbox_exporter/releases/download/v0.25.0/blackbox_exporter-0.25.0.linux-amd64.tar.gz
+        dest: "{{ install_dir }}/blackbox_exporter.tar.gz"
+        mode: '0755'
+
+    - name: Extract BlackBox
+      unarchive:
+        src: "{{ install_dir }}/blackbox_exporter.tar.gz"
+        dest: "{{ install_dir }}/"
+        remote_src: yes
+
+    - name: Create BlackBox configuration file
+      copy:
+        dest: "{{ install_dir  }}/blackbox_exporter-0.25.0.linux-amd64/blackbox_config.yml"
+        content: |
+          modules:
+            http_2xx:
+              prober: http
+              timeout: 10s
+              http:
+                valid_http_versions: ["HTTP/1.1", "HTTP/2"]
+                valid_status_codes: []  # Все 2xx коды считаются успешными
+                method: GET
+                fail_if_ssl: false
+                fail_if_not_ssl: false
+                headers:
+                  Host: "vega.mirea.ru"
+            http_post:
+              prober: http
+              timeout: 10s
+              http:
+                method: POST
+                headers:
+                  Content-Type: application/x-www-form-urlencoded
+
+    - name: Run BlackBox Exporter
+      shell: "/home/greyeye/monitoring/blackbox_exporter-0.25.0.linux-amd64/blackbox_exporter --config.file=/home/greyeye/monitoring/blackbox_exporter-0.25.0.linux-amd64/blackbox_config.yml &"
+      become: yes
+
+
+

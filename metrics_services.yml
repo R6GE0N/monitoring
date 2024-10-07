@@ -1,0 +1,209 @@
+---
+- name: Setup systemd services for all metrics exporters
+  hosts: localhost
+  become: true
+  tasks:
+
+    - name: Create systemd service for Prometheus
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus Monitoring
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/prometheus-2.46.0.linux-amd64/prometheus \
+            --config.file=/home/greyeye/monitoring/prometheus-2.46.0.linux-amd64/prometheus.yml \
+            --storage.tsdb.path=/home/greyeye/monitoring/prometheus-2.46.0.linux-amd64/data
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for Alertmanager
+      copy:
+        dest: /etc/systemd/system/alertmanager.service
+        content: |
+          [Unit]
+          Description=Alertmanager Service
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/alertmanager \
+            --config.file=/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/alertmanager.yml
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for Node Exporter
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        content: |
+          [Unit]
+          Description=Node Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/node_exporter-1.5.0.linux-amd64/node_exporter
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for cAdvisor
+      copy:
+        dest: /etc/systemd/system/cadvisor.service
+        content: |
+          [Unit]
+          Description=cAdvisor Container Metrics
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/usr/bin/docker run \
+            --volume=/:/rootfs:ro \
+            --volume=/var/run:/var/run:ro \
+            --volume=/sys:/sys:ro \
+            --volume=/var/lib/docker/:/var/lib/docker:ro \
+            --volume=/dev/disk/:/dev/disk:ro \
+            --publish=8080:8080 \
+            --detach=true \
+            --name=cadvisor \
+            --privileged \
+            --device=/dev/kmsg \
+            gcr.io/cadvisor/cadvisor:latest
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for Smartctl Exporter
+      copy:
+        dest: /etc/systemd/system/smartctl_exporter.service
+        content: |
+          [Unit]
+          Description=Smartctl Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/smart_exporter/smartctl_exporter-0.12.0.linux-amd64/smartctl_exporter \
+            --smartctl.path=/home/greyeye/monitoring/smart_exporter/smartctl_exporter-0.12.0.linux-amd64/smartctl_config.yml
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for Ping Exporter
+      copy:
+        dest: /etc/systemd/system/ping_exporter.service
+        content: |
+          [Unit]
+          Description=Ping Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/ping_exporter \
+            --config.path=/home/greyeye/monitoring/ping_exp.yml
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for Blackbox Exporter
+      copy:
+        dest: /etc/systemd/system/blackbox_exporter.service
+        content: |
+          [Unit]
+          Description=Blackbox Exporter
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/blackbox_exporter-0.25.0.linux-amd64/blackbox_exporter \
+            --config.file=/home/greyeye/monitoring/blackbox_exporter-0.25.0.linux-amd64/blackbox_config.yml
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create systemd service for NUT Exporter
+      copy:
+        dest: /etc/systemd/system/nut_exporter.service
+        content: |
+          [Unit]
+          Description=NUT Exporter (UPS Monitoring)
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=root
+          ExecStart=/home/greyeye/monitoring/nut_exporter
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd to apply the new services
+      command: systemctl daemon-reload
+
+    - name: Enable and start Prometheus service
+      systemd:
+        name: prometheus.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start Alertmanager service
+      systemd:
+        name: alertmanager.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start Node Exporter service
+      systemd:
+        name: node_exporter.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start cAdvisor service
+      systemd:
+        name: cadvisor.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start Smartctl Exporter service
+      systemd:
+        name: smartctl_exporter.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start Ping Exporter service
+      systemd:
+        name: ping_exporter.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start Blackbox Exporter service
+      systemd:
+        name: blackbox_exporter.service
+        enabled: yes
+        state: started
+
+    - name: Enable and start NUT Exporter service
+      systemd:
+        name: nut_exporter.service
+        enabled: yes
+        state: started

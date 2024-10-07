@@ -1,0 +1,9 @@
+{{ define "telegram.node_exporter" }}
+  {{ range .Alerts }}
+  🔥{{ .Status | toUpper }}🔥
+  Алерт (Node Exporter): {{ .Labels.alertname }}
+  Инстанс: {{ .Labels.instance }}
+  {{ if .Annotations.summary }}Сводка: {{ .Annotations.summary }}{{ end }}
+  {{ if .Annotations.description }}Описание:{{ .Annotations.description }}{{ end }}
+  {{ end }}
+{{ end }}

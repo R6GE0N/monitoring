@@ -1,0 +1,97 @@
+global:
+  resolve_timeout: 2m
+  telegram_api_url: "https://api.telegram.org"
+
+templates:
+  - '/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/telegram.tmpl'
+  - '/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/telegram_node.tmpl'
+  - '/home/greyeye/monitoring/alertmanager-0.25.0.linux-amd64/telegram_cad.tmpl'
+
+receivers:
+  - name: telegram-test
+    telegram_configs:
+      - chat_id: -1002445026260
+        bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+        api_url: "https://api.telegram.org"
+        send_resolved: true
+        parse_mode: HTML
+        message_thread_id: 7
+        message: '{{ template "telegram.default" . }}'
+
+  - name: tele_node_crit
+    telegram_configs:
+      - chat_id: -1002445026260
+        bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+        api_url: "https://api.telegram.org"
+        send_resolved: true
+        parse_mode: HTML
+        message_thread_id: 28
+        message: '{{ template "telegram.node_exporter" . }}'
+
+  - name: tele_node_warn
+    telegram_configs:
+      - chat_id: -1002445026260
+        bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+        api_url: "https://api.telegram.org"
+        send_resolved: true
+        parse_mode: HTML
+        message_thread_id: 30
+        message: '{{ template "telegram.node_exporter" . }}'
+
+  - name: tele_cad_crit
+    telegram_configs:
+      - chat_id: -1002445026260
+        bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+        api_url: "https://api.telegram.org"
+        send_resolved: true
+        parse_mode: HTML
+        message_thread_id: 13
+        message: '{{ template "telegram.cadvisor" . }}'
+
+  - name: tele_cad_warn
+    telegram_configs:
+      - chat_id: -1002445026260
+        bot_token: 8126190727:AAGW-oNQSgTS72AxSzp2lhbFMGjAuY1TtcQ
+        api_url: "https://api.telegram.org"
+        send_resolved: true
+        parse_mode: HTML
+        message_thread_id: 14
+        message: '{{ template "telegram.cadvisor" . }}'
+
+
+route:
+  group_by: ['ds_id'] # Алерты группируются по UUID кластера.
+  group_wait: 15s
+  group_interval: 30s
+  repeat_interval: 3h
+  receiver: telegram-test
+  routes:
+    - receiver: telegram-test
+      continue: true
+      matchers:
+        - severity="critical"
+        - job="blackbox_exporter"
+
+    - receiver: tele_node_crit
+      continue: true
+      matchers:
+        - severity="critical"
+        - job="node_exporter"
+
+    - receiver: tele_node_warn
+      continue: true
+      matchers:
+        - severity="warning"
+        - job="node_exporter"
+
+    - receiver: tele_cad_crit
+      continue: true
+      matchers:
+        - severity="critical"
+        - job="cadvisor"
+
+    - receiver: tele_cad_warn
+      continue: true
+      matchers:
+        - severity="warning"
+        - job="cadvisor"
